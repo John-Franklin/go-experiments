@@ -64,9 +64,11 @@ var (
 func beforeVoteAccess() {
 	voteTableOnce.Do(func() {
 		pg, _ := getDefaultPG()
-		_, err := pg.db.Query(context.Background(), "CREATE TABLE votes (CampaignId: int, UserId: int, UnionId: int, Approve: bit)")
+		_, err := pg.db.Query(context.Background(), "CREATE TABLE votes (Id SERIAL PRIMARY KEY, CampaignId int, UserId int, UnionId int, Approve boolean)")
+
 		if err != nil {
-			fmt.Println("vote table already created")
+			fmt.Println(fmt.Errorf("create table caused error: %w", err))
+			fmt.Println("votes table already created")
 		}
 	})
 }
@@ -75,25 +77,32 @@ func beforeVoteAccess() {
 func postVotes(c *gin.Context) {
 	// This should probably be middleware but that for later
 	beforeVoteAccess()
-	var newvote vote
-
+	var newVote vote
+	pg, _ := getDefaultPG()
 	// Call BindJSON to bind the received JSON to
-	// newvote.
-	if err := c.BindJSON(&newvote); err != nil {
+	if err := c.BindJSON(&newVote); err != nil {
+		fmt.Println("In error")
+		fmt.Println(fmt.Errorf("JSON error: %w", err))
+
+		return
+	}
+	_, err := pg.db.Query(context.Background(), "INSERT INTO votes (CampaignId, UserId, UnionId, Approve) VALUES ($1, $2, $3, $4)", newVote.CampaignId, newVote.UserId, newVote.UnionId, newVote.Approve)
+	if err != nil {
+		fmt.Println(fmt.Errorf("post vote caused SQL error: %w", err))
 		return
 	}
 	// library to consider: jet for SQL?
 	// pgx is appropriate for the demo in question.
 	// Add the new vote to the slice.
-	// votes = append(votes, newvote)
-	c.IndentedJSON(http.StatusCreated, newvote)
+	// votes = append(votes, newVote)
+	c.IndentedJSON(http.StatusCreated, newVote)
 }
 
 // getVotes responds with the list of all votes as JSON.
 func getVotes(c *gin.Context) {
 	// This should probably be middleware but let's not for now
 	pg, _ := getDefaultPG()
-	rows, _ := pg.db.Query(context.Background(), "select * from votes")
+	rows, _ := pg.db.Query(context.Background(), "SELECT * FROM votes")
 	votes := []vote{}
 	for rows.Next() {
 		values, err := rows.Values()
@@ -104,10 +113,10 @@ func getVotes(c *gin.Context) {
 		// convert DB types to Go types
 
 		votes = append(votes, vote{
-			ID:         values[0].(int),
-			CampaignId: values[1].(int),
-			UserId:     values[2].(int),
-			UnionId:    values[3].(int),
+			ID:         int(values[0].(int32)),
+			CampaignId: int(values[1].(int32)),
+			UserId:     int(values[2].(int32)),
+			UnionId:    int(values[3].(int32)),
 			Approve:    values[4].(bool),
 		})
 
