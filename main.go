@@ -34,10 +34,10 @@ func NewPG(ctx context.Context, connString string) (*postgres, error) {
 	return pgInstance, pgError
 }
 
-const databaseUrl = "postgres://postgres:password@localhost:5432/postgres"
+const databaseUrl = "postgres://postgres:lockpicks@localhost:5432/postgres"
 
 func getPG() (*postgres, error) {
-	databaseUrl := "postgres://postgres:password@localhost:5432/postgres"
+	databaseUrl := "postgres://postgres:lockpicks@localhost:5432/postgres"
 	return NewPG(context.Background(), databaseUrl)
 }
 func (pg *postgres) Ping(ctx context.Context) error {
