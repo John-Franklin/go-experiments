@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 
@@ -36,8 +37,7 @@ func NewPG(ctx context.Context, connString string) (*postgres, error) {
 
 const databaseUrl = "postgres://postgres:lockpicks@localhost:5432/postgres"
 
-func getPG() (*postgres, error) {
-	databaseUrl := "postgres://postgres:lockpicks@localhost:5432/postgres"
+func getDefaultPG() (*postgres, error) {
 	return NewPG(context.Background(), databaseUrl)
 }
 func (pg *postgres) Ping(ctx context.Context) error {
@@ -46,11 +46,6 @@ func (pg *postgres) Ping(ctx context.Context) error {
 
 func (pg *postgres) Close() {
 	pg.db.Close()
-}
-
-// votes slice to seed record vote data.
-var votes = []vote{
-	{CampaignId: 1, UserId: 1, UnionId: 1, Approve: false},
 }
 
 // vote represents data about a record vote.
@@ -68,14 +63,17 @@ var (
 
 func beforeVoteAccess() {
 	voteTableOnce.Do(func() {
-		pg, _ := getPG()
-		pg.db.Query(context.Background(), "CREATE TABLE votes (CampaignId: int, UserId: int, UnionId: int, Approve: bit)")
+		pg, _ := getDefaultPG()
+		_, err := pg.db.Query(context.Background(), "CREATE TABLE votes (CampaignId: int, UserId: int, UnionId: int, Approve: bit)")
+		if err != nil {
+			fmt.Println("vote table already created")
+		}
 	})
 }
 
 // postVotes adds an vote from JSON received in the request body.
 func postVotes(c *gin.Context) {
-	// This should probably be middleware but let's not for now
+	// This should probably be middleware but that for later
 	beforeVoteAccess()
 	var newvote vote
 
@@ -87,13 +85,33 @@ func postVotes(c *gin.Context) {
 	// library to consider: jet for SQL?
 	// pgx is appropriate for the demo in question.
 	// Add the new vote to the slice.
-	votes = append(votes, newvote)
+	// votes = append(votes, newvote)
 	c.IndentedJSON(http.StatusCreated, newvote)
 }
 
 // getVotes responds with the list of all votes as JSON.
 func getVotes(c *gin.Context) {
 	// This should probably be middleware but let's not for now
+	pg, _ := getDefaultPG()
+	rows, _ := pg.db.Query(context.Background(), "select * from votes")
+	votes := []vote{}
+	for rows.Next() {
+		values, err := rows.Values()
+		if err != nil {
+			log.Fatal("error while iterating dataset")
+		}
+
+		// convert DB types to Go types
+
+		votes = append(votes, vote{
+			ID:         values[0].(int),
+			CampaignId: values[1].(int),
+			UserId:     values[2].(int),
+			UnionId:    values[3].(int),
+			Approve:    values[4].(bool),
+		})
+
+	}
 	c.IndentedJSON(http.StatusOK, votes)
 }
 
